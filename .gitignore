@@ -11,3 +11,8 @@ venv/
 
 # Otros
 data/noticias_chile_2023_2025.csv
+data/clean.parquet
+data/clean_with_region.parquet
+warehouse/fact_news/year=2023
+warehouse/fact_news/year=2024
+warehouse/fact_news/year=2025
