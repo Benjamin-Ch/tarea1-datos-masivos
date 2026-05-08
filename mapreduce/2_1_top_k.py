@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 import pyarrow.parquet as pq
 import re # Para transformar a tokens o separar el texto
+import matplotlib.pyplot as plt # Graficar
 
 ## Esta es una funcion que recorre la estructura de las carpetas del data warehouse
 def obtener_parquet_path(path_base):
@@ -106,6 +107,37 @@ def reduce_stand(key, values):
 
 # =================================================
 # =================================================
+# CREACION DE GRAFICOS PARA EL ANALISIS y INFORME
+def graficar_top_k(resultados, mes="2024-05"):
+    
+    palabras = []
+    frecuencias = []
+    
+    for year_mes, word, count in resultados:
+        if year_mes == mes:
+            palabras.append(word)
+            frecuencias.append(count)
+    
+    plt.figure(figsize=(12,6))
+    
+    plt.barh(palabras[::-1], frecuencias[::-1])
+    
+    plt.title(f"Top 20 términos - {mes}")
+    plt.xlabel("Frecuencia")
+    plt.ylabel("Palabras")
+    
+    plt.tight_layout()
+     # crear carpeta si no existe
+    os.makedirs("graficos", exist_ok=True)
+
+    # guardar imagen
+    plt.savefig(f"graficos/top20_{mes}.png", dpi=300)
+    del palabras
+    del frecuencias
+
+# =================================================
+# =================================================
+
 
 # FUNCION que agrupa todas las funciones anteriores (o funciones que usan funciones anteiores)
 # Esto crea el producto de la reduccion de los datos con map, shuffle y reduce
@@ -134,7 +166,8 @@ def process_data_reduce(path_base):
         top_20_mes = calculo_top_k(reduce_data, k=20)
         # Guardamos los datos generales que son menos pesados 
         resultados_generales.extend(top_20_mes)
-
+        mes_ano = f"{year}-{month}"
+        graficar_top_k(top_20_mes, mes=mes_ano)
         ## POR ULTIMO, liberamos los datos de las estructuras por si acaso, apesar de que estas se iguales a [] despues
         del registros
         del mapeado
@@ -174,6 +207,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 """ RESULTADOS DEL CODIGO

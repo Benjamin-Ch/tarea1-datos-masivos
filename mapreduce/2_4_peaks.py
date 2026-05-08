@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 import pyarrow.parquet as pq
 import re 
+import matplotlib.pyplot as plt
 
 #### VAMOS A REUTILIZAR MUCHAS FUNCIONES DEL CODIGO ANTERIOR
 def obtener_parquet_path(path_base):
@@ -148,8 +149,57 @@ def detectar_peak(sorted_diario, promedio_movil, umbral=1.5):
             peaks.append((date, value, media))
     return peaks
 
+# =================================================
+# =================================================
+# GRAFICA de analisis de los peaks detectados en el codigo 
+def graficar_peaks(sorted_diario, promedio_movil, peaks):
 
-### 
+    # DATOS PRINCIPALES y NESESARIOS
+
+    fechas = [d for d, v in sorted_diario]
+    cantidades = [v for d, v in sorted_diario]
+    # promedio movil
+    promedio_vals = []
+
+    for _, avg in promedio_movil:
+        promedio_vals.append(avg if avg is not None else 0)
+    # CREAR FIGURA
+    plt.figure(figsize=(16,7))
+
+    # línea principal
+    plt.plot(fechas, cantidades, label="Cantidad diaria artículos")
+
+    # promedio movil
+    plt.plot(fechas, promedio_vals, linestyle="--", label="Promedio móvil (7 días)")
+
+    # GRAFICACION DE LOS PEAKS
+    peak_fechas = [d for d, _, _ in peaks]
+    peak_values = [v for _, v, _ in peaks]
+    plt.scatter( peak_fechas, peak_values,
+        s=80, label="Peaks detectados")
+
+    # ANOTACIONES
+    for fecha, valor, _ in peaks:
+        plt.annotate(fecha, (fecha, valor),
+            textcoords="offset points", xytext=(0,10),
+            ha='center', fontsize=8)
+
+    plt.title("Detección de peaks en volumen diario de artículos")
+    plt.xlabel("Fecha")
+    plt.ylabel("Cantidad de artículos")
+    plt.xticks(rotation=45)
+
+    plt.grid(alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+
+    # GUARDAMOS LA IMAGEN
+    os.makedirs("graficos", exist_ok=True)
+
+    plt.savefig("graficos/deteccion_peaks.png", dpi=300, bbox_inches='tight')
+    plt.close()
+
+
 # POR ULTIMO el MAIN
 def main():
     path_base = "warehouse/fact_news"
@@ -166,8 +216,11 @@ def main():
     for date, value, media in peaks:
         print(f"{date}: {value} articulos (promedio: {media:.2f})")
 
+    graficar_peaks(sorted_diario, p_movil, peaks)
+
 if __name__ == "__main__":
     main()
+    
 
 
 

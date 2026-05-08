@@ -3,6 +3,7 @@ from collections import defaultdict
 import pyarrow.parquet as pq
 import re 
 import math
+import matplotlib.pyplot as plt # Garficar
 
 ## FUNCIONES PASADAS
 def obtener_parquet_path(path_base):
@@ -176,6 +177,82 @@ def compute_kl_divergence(source_counts, conteo_global, source_totals, global_to
     return results
 
 ####
+
+# =================================================
+# =================================================
+# GRAFICA de analisis de comparacion entre fuentes por medio de valor KL
+def graficar_kl_divergence(resultados, top=15):
+    # Selecionamos los mayores valores y luego los menores 
+    top_n = resultados[:top]
+    fuentes = [] 
+    score = []
+    for source, valores in top_n:
+        fuentes.append(source)
+        score.append(valores)
+    # Ahora Como me quedo alreves desidi invertirlo 
+    fuentes = fuentes[::-1]
+    score = score[::-1]
+
+    plt.figure(figsize=(12, 8))
+
+    plt.barh(fuentes, score)
+
+    plt.xlabel("Divergencia KL")
+    plt.ylabel("Fuente")
+    plt.title(f"Top {top} medios con mayor divergencia de vocabulario")
+
+    plt.grid(axis='x', linestyle='--', alpha=0.5)
+
+    plt.tight_layout()
+
+    # guardar imagen
+    os.makedirs("graficos", exist_ok=True)
+
+    plt.savefig(
+        "graficos/kl_divergence_fuentes.png",
+        dpi=300,
+        bbox_inches='tight'
+    )
+
+    plt.close()
+
+    ## AHORA GRAFICAMOS EL TOP AL INVERSO
+    top_n = resultados[-15:]
+    fuentes = [] 
+    score = []
+    for source, valores in top_n:
+        fuentes.append(source)
+        score.append(valores)
+    # Ahora Como me quedo alreves desidi invertirlo 
+    fuentes = fuentes[::-1]
+    score = score[::-1]
+
+    plt.figure(figsize=(12, 8))
+
+    plt.barh(fuentes, score)
+
+    plt.xlabel("Divergencia KL")
+    plt.ylabel("Fuente")
+    plt.title(f"Top {top} medios con menor divergencia de vocabulario")
+
+    plt.grid(axis='x', linestyle='--', alpha=0.5)
+
+    plt.tight_layout()
+
+    # guardar imagen
+    os.makedirs("graficos", exist_ok=True)
+
+    plt.savefig(
+        "graficos/kl_divergence_fuentes_inverso.png",
+        dpi=300,
+        bbox_inches='tight'
+    )
+
+    plt.close()
+
+
+
+
 # POR ULTIMO CREAMOS EL MAIN
 def main():
     base_path = "warehouse/fact_news"
@@ -190,8 +267,10 @@ def main():
     
     kl_results = compute_kl_divergence(source_counts, global_counts, source_totals, global_total, k=50)
     # El Score es el valor KL de la divergencia
-    for source, score in sorted(kl_results.items(), key=lambda x: x[1], reverse=True):
-        print(f"{source}: {score:.6f}")
+    resultados_ordenados = sorted(kl_results.items(), key=lambda x: x[1], reverse=True)
+    graficar_kl_divergence(resultados_ordenados, top=15)
+    #for source, score in sorted(kl_results.items(), key=lambda x: x[1], reverse=True):
+    #   print(f"{source}: {score:.6f}")
 ## SI el valor KL es ALTO, entonces es un vocabulario muy distinto al global
 ## Si el valor KL es BAJO, entonces es un vocabulario similar al promedio
 
