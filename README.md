@@ -1,7 +1,7 @@
-Como ejecutar el codigo
+### Como ejecutar el codigo
 
-1. Descargar noticias_chile_2023_2025.csv (o clean_with_region.parquet, para ahorrar tiempo en el paso 04_enrich_regions) y posicionarlo en `/data`.
-Descargar aqui: [clean_with_region.parquet.parquet](https://uccl0-my.sharepoint.com/:u:/g/personal/benjamin_cheuquian_uc_cl/IQCQpDhORz_mTaS3CKTgmuZ9Ae8WuNMME-JqjDAk_f4lQB4?e=fxq8bj)
+1. Descargar noticias_chile_2023_2025.csv (o clean_with_region.parquet, para ahorrar tiempo en el paso 04_enrich_regions) y posicionarlo en `/data`.  
+Descargar aqui: [clean_with_region.parquet](https://uccl0-my.sharepoint.com/:u:/g/personal/benjamin_cheuquian_uc_cl/IQCQpDhORz_mTaS3CKTgmuZ9Ae8WuNMME-JqjDAk_f4lQB4?e=fxq8bj)
 
 3. Para generar warehouse, ejecutar:
 
