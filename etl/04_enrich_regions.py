@@ -3,10 +3,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import re
 from unidecode import unidecode
+from multiprocessing import Pool, cpu_count
 from region_aliases import REGION_ALIASES
 
-
-# Precompilar patrones para velocidad
+# Precompilar patrones (debe estar en el módulo, no en función,
+# para que multiprocessing pueda serializarlo)
+# Referencias: https://superfastpython.com/multiprocessing-pool-map-chunksize/
 COMPILED = {
     region: re.compile("|".join(aliases), re.IGNORECASE)
     for region, aliases in REGION_ALIASES.items()
@@ -16,7 +18,9 @@ COMPILED = {
 def normalize(text):
     return unidecode(str(text)).lower()
 
-def detect_region(title, body):
+def detect_region(args):
+    """Map: (title, body) → region"""
+    title, body = args
     title_norm = normalize(title)
     body_norm  = normalize(body)
     scores = {}
@@ -30,25 +34,39 @@ def detect_region(title, body):
         return "Desconocida"
     return max(scores, key=scores.get)
 
-# Leer y escribir en chunks, agregando columna region
-writer = None
-parquet_file = pq.ParquetFile("data/clean.parquet")
+def process_batch(batch_df):
+    """
+    MAP:    lista de (title, body) → lista de regiones (en paralelo)
+    REDUCE: agregar columna 'region' al DataFrame
+    """
+    pairs = list(zip(batch_df["title"], batch_df["body"]))
 
-for i, batch in enumerate(parquet_file.iter_batches(batch_size=50_000)):
-    print(f"Batch {i}...")
-    chunk = batch.to_pandas()
+    # Map paralelo: cada worker procesa un subconjunto de filas
+    with Pool(processes=cpu_count()) as pool:
+        regions = pool.map(detect_region, pairs, chunksize=500)
 
-    chunk["region"] = [
-        detect_region(t, b)
-        for t, b in zip(chunk["title"], chunk["body"])
-    ]
+    # Reduce: adjuntar resultado al DataFrame
+    batch_df["region"] = regions
+    return batch_df
 
-    table = pa.Table.from_pandas(chunk, preserve_index=False)
-    if writer is None:
-        writer = pq.ParquetWriter("data/clean_with_region.parquet", table.schema)
-    writer.write_table(table)
+if __name__ == "__main__":
+    BATCH_SIZE = 50_000
+    writer = None
+    parquet_file = pq.ParquetFile("data/clean.parquet")
 
-if writer:
-    writer.close()
+    for i, batch in enumerate(parquet_file.iter_batches(batch_size=BATCH_SIZE)):
+        print(f"Batch {i} ({BATCH_SIZE * i}–{BATCH_SIZE * (i+1)})...")
+        chunk = batch.to_pandas()
 
-print("✅ clean_with_region.parquet guardado")
+        # Map + Reduce
+        chunk = process_batch(chunk)
+
+        table = pa.Table.from_pandas(chunk, preserve_index=False)
+        if writer is None:
+            writer = pq.ParquetWriter("data/clean_with_region.parquet", table.schema)
+        writer.write_table(table)
+
+    if writer:
+        writer.close()
+
+    print("✅ clean_with_region.parquet guardado")
