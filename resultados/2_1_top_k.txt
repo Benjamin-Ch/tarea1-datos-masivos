@@ -1,263 +1,43 @@
-import os
-from collections import defaultdict
-import pyarrow.parquet as pq
-import re # Para transformar a tokens o separar el texto
-import matplotlib.pyplot as plt # Graficar
-
-## Esta es una funcion que recorre la estructura de las carpetas del data warehouse
-def obtener_parquet_path(path_base):
-    paths = []
-    for year in os.listdir(path_base):
-        year_path = os.path.join(path_base, year)
-        
-        if not os.path.isdir(year_path):
-            continue
-        
-        for month_folder in os.listdir(year_path):
-            month_path = os.path.join(year_path, month_folder)
-            
-            if not os.path.isdir(month_path):
-                continue
-            
-            parquet_file = os.path.join(month_path, "data.parquet")
-            
-            if os.path.exists(parquet_file):
-                # extraemos mes como número ya que este esta en la caperta
-                month = month_folder.split("=")[1]
-                # zfill asegura que los meses tengan dos digitos
-                paths.append((year, month.zfill(2), parquet_file))
-    
-    return paths
-
-## FUncion que lee los archivos parquet
-def read_data_parquet(path):
-    tabla = pq.read_table(path)
-    return tabla.to_pylist()
-
-
-## Ahora hacemos un procesamiento de texto a tokens y luego usamos el STOPWORDS
-## Paginas de referencia para entender mejor este proceso de nuestra parte:
-# 1) https://cr0wg4n.medium.com/palabras-vac%C3%ADas-en-espa%C3%B1ol-stop-words-ft-python-3117e52d2bff
-# 2) https://medium.com/@abhishekjainindore24/all-about-tokenization-stop-words-stemming-and-lemmatization-in-nlp-1620ffaf0f87
-
-
-# EL diccionario de stop words, este tomo un tiempo de buscar en paginas para crearlo y que fuera suficiente o aceptable
-stop_words = {"a", "ante", "bajo", 'cabe', 'con', 'contra', 'de', 'desde', 'durante', 'en', 'entre', 
-'hacia', 'hasta', 'mediante', 'para', 'por', 'según', 'sin', 'sobre', 'tras', 'vía', 'el', 'la', 'los', 'las', 
-'un', 'una', 'unos', 'unas', "que", "qué", "quien", "quienes", "cual", "cuales", "yo", "tú", "él", "ella", 
-"nosotros", "vosotros", "ellos", "mi", "mis", "su", "sus", "y", "e", "ni", "o", "u", "pero", "aunque", "sino",
-"ser", "estar", "haber", "tener", "fue", "era", "son", "es", "está", "había", "habría", "tiene", "tienen", "sea", 
-"siendo", "aquí", "allí", "allá", "tan", "muy", "mucho", "poco", 'no', 'sí', 'más', 'ya', 'todo', 'todos', 'toda', 
-'todas', 'donde', 'cuando', 'este', 'esta', 'estos', 'estas', 'ese', 'esa', 'esos', 'esas', 'aquel', 'aquella', 
-'aquellos', 'aquellas', 'mío', 'tuyo', 'suyo', 'nuestro', 'vuestro', 'como', 'cómo', 'al', 'del', 'lo', 'le', 'les', 
-'me', 'te', 'se', 'nos', 'os', 'estamos', 'están', 'he', 'has', 'ha', 'hemos', 'habéis', 'han', 'pero', 'porque', 'pues', 
-'entonces', 'así', 'también', 'tampoco', 'si', 'esto', 'hay', 'eso', 'uno', 'km', 'gran', 'dijo', 'tanto', 'caso', 'dos',
-'puede', 'además', 'hace', 'después', 'solo', 'vez', 'hacer', 'mientras', 'hoy', 'sido', 'cada', 'of',
-'n', 'parte', 'años', 'año', 'the', 'c', 'luego', 'h', 'personas','tres', 'momento', 'día', 'bien', 'días', 'otros', 's',
-'será', 'ahora', "horas"
-} # Las ultimas filas son palabras que sientimos que no provee informacion o que eran poco representativas para analisis
-# Algunas fueron elegidas como "ahora", por no tener una clara forma de dar informacion o similar asi como "dia" tambien,
-# YA que estos pueden ser reportajes diarios o similar, otro ejemplo seria "horas"
-
-# Funcion de transformar a tokens y luego stop words (Se podian importar pero no se si en español)
-def separar_texto(text):
-    text = text.lower()
-    tokens = re.findall(r'[a-záéíóúñü]+', text)
-    return tokens
-def remove_stopwords(text):
-     # Pensamos hacer el mapeo aqui mismo para no recorrer mucho los datos
-     # Pero era mas ordenado no hacerlo 
-    rest = []
-    tokens = separar_texto(text)
-    for item in tokens:
-        if not item in stop_words:
-            rest.append(item)
-    return rest
-
-
-## Ahora hacemos la funcion del mapeo 
-def mapeo(year, month, registro):
-    retorno = []
-    ## Por como se construyen los datos
-    titulo = registro.get("title", "")
-    cuerpo = registro.get("body", "")
-    text = f"{titulo} {cuerpo}"
-
-    words = remove_stopwords(text)
-    year_mes = f"{year}-{month}"
-    for item in words:
-        retorno.append(((year_mes, item),1))
-    return retorno
-
-## Funcion para el Shuffle, pasa que sin el Shuffle la funcion Reduce recibiria datos desordenados y 
-# no podria saber cuando termina de contar una palabra, o cuando empieza otra
-def shuffle(mapeado):
-    # Con esto se evitan errores de Key
-    grouped = defaultdict(list)
-    
-    for k, v in mapeado:
-        grouped[k].append(v)
-    # Agrega un 1 a la lista del value de la key, luego reduce lo suma todo de la lista
-    return grouped
-
-## Funcion Reduce (Esta es un caso general casi de la funcion en verdad)
-def reduce_stand(key, values):
-    return (key, sum(values))
-
-
-# =================================================
-# =================================================
-# CREACION DE GRAFICOS PARA EL ANALISIS y INFORME
-def graficar_top_k(resultados, mes="2024-05"):
-    
-    palabras = []
-    frecuencias = []
-    
-    for year_mes, word, count in resultados:
-        if year_mes == mes:
-            palabras.append(word)
-            frecuencias.append(count)
-    
-    plt.figure(figsize=(12,6))
-    
-    plt.barh(palabras[::-1], frecuencias[::-1])
-    
-    plt.title(f"Top 20 términos - {mes}")
-    plt.xlabel("Frecuencia")
-    plt.ylabel("Palabras")
-    
-    plt.tight_layout()
-     # crear carpeta si no existe
-    os.makedirs("graficos", exist_ok=True)
-
-    # guardar imagen
-    plt.savefig(f"graficos/top20_{mes}.png", dpi=300)
-    del palabras
-    del frecuencias
-
-# =================================================
-# =================================================
-
-
-# FUNCION que agrupa todas las funciones anteriores (o funciones que usan funciones anteiores)
-# Esto crea el producto de la reduccion de los datos con map, shuffle y reduce
-def process_data_reduce(path_base):
-    ## Claro que existe una forma mejor optimizada sin acumular todo en "mapeado",
-    # Pero esta es mas facil de ver y revisar nos parecio 
-    # (Aunque consume harta memoria, por lo que liberamos memoria si no este entrega "Killed")
-    paths = obtener_parquet_path(path_base)
-    resultados_generales = []
-    ## Recoremos los datos mes por mes
-    for year, month, file_path in paths:
-        print(f"- Procesando los datos de: {year}-{month}...")
-
-        mapeado = []
-        registros = read_data_parquet(file_path)
-        for reg in registros:
-            # Extiende porque mapeo devuelve una lista de tuplas
-            mapeado.extend(mapeo(year, month, reg))
-
-        agrupacion = shuffle(mapeado)
-        reduce_data = []
-        for key, values in agrupacion.items():
-            reduce_data.append(reduce_stand(key, values))
-
-        ## SE USA LA FUNCION DE ADELANTE QUE OBTIENE LOS TOP 20
-        top_20_mes = calculo_top_k(reduce_data, k=20)
-        # Guardamos los datos generales que son menos pesados 
-        resultados_generales.extend(top_20_mes)
-        mes_ano = f"{year}-{month}"
-        graficar_top_k(top_20_mes, mes=mes_ano)
-        ## POR ULTIMO, liberamos los datos de las estructuras por si acaso, apesar de que estas se iguales a [] despues
-        del registros
-        del mapeado
-        del agrupacion
-        del reduce_data
-
-
-    print("- Termino de procesar el todos los mes")
-    os.makedirs("resultados", exist_ok=True)
-    output_path = os.path.join("resultados", "2_1_top_k.txt")
-    with open(output_path, "w", encoding="utf-8") as f:
-        for year_mes, word, count in sorted(resultados_generales, key=lambda x: (x[0], -x[2])):
-            linea = f"{year_mes}, {word}, {count}\n"
-            print(linea, end="")
-            f.write(linea)
-    print(f"Resultados guardados en {output_path}")
-
-
-########################################################################
-# ======================================================================
-
-## AHORA ES LA LOGICA DE ESTE PUNTO 2.1) TOP_K  
-# (Lo tuvimos que usar antes para que liberar memoria en el procesamiento de datos)
-def calculo_top_k(reduce_data, k=20): # Por defecto es 20, por lo de la pregunta que son los 20
-    mensual = defaultdict(list)
-    for (year_mes, word), count in reduce_data:
-        mensual[year_mes].append((word, count))
-
-    resultados = [] 
-    for year_mes, words in mensual.items():
-        top_k = sorted(words, key=lambda x: x[1], reverse=True)[:k]
-        for word, count in top_k:
-            resultados.append((year_mes, word, count))
-    
-    return resultados
-
-# Por ultimo llamamos al main y ejecutamos las funciones anteriores en orden
-def main():
-    path_base = "warehouse/fact_news"
-    print(f"Empezo a procesar los datos")
-    process_data_reduce(path_base)
-    print(f"Termino de reducir los datos {path_base}")
-
-if __name__ == "__main__":
-    main()
-
-
-
-""" RESULTADOS DEL CODIGO
-
-year=2023-01, chile, 23212
+year=2023-01, chile, 23211
 year=2023-01, gobierno, 16906
 year=2023-01, país, 16267
-year=2023-01, nacional, 15567
+year=2023-01, nacional, 15566
 year=2023-01, presidente, 15026
 year=2023-01, estado, 12718
 year=2023-01, enero, 12607
 year=2023-01, nuevo, 12349
-year=2023-01, primera, 10599
+year=2023-01, primera, 10596
 year=2023-01, pasado, 10471
 year=2023-01, millones, 10364
 year=2023-01, vida, 10360
-year=2023-01, tiempo, 10305
-year=2023-01, cuenta, 10190
+year=2023-01, tiempo, 10303
+year=2023-01, cuenta, 10189
 year=2023-01, hecho, 10178
 year=2023-01, mundo, 10133
 year=2023-01, lugar, 9985
 year=2023-01, nueva, 9766
 year=2023-01, trabajo, 9667
 year=2023-01, acuerdo, 9513
-year=2023-02, chile, 19526
-year=2023-02, país, 14375
-year=2023-02, incendios, 13450
-year=2023-02, nacional, 12474
-year=2023-02, viña, 11553
-year=2023-02, región, 10937
+year=2023-02, chile, 19524
+year=2023-02, país, 14372
+year=2023-02, incendios, 13445
+year=2023-02, nacional, 12470
+year=2023-02, viña, 11551
+year=2023-02, región, 10936
 year=2023-02, gobierno, 10775
-year=2023-02, festival, 10487
-year=2023-02, estado, 10476
-year=2023-02, febrero, 10358
+year=2023-02, festival, 10485
+year=2023-02, estado, 10475
+year=2023-02, febrero, 10356
 year=2023-02, millones, 8913
-year=2023-02, primera, 8890
+year=2023-02, primera, 8888
 year=2023-02, tiempo, 8727
 year=2023-02, pasado, 8660
 year=2023-02, vida, 8618
-year=2023-02, cuenta, 8547
+year=2023-02, cuenta, 8546
 year=2023-02, hecho, 8270
 year=2023-02, lugar, 8186
-year=2023-02, fueron, 8148
-year=2023-02, partido, 7956
+year=2023-02, fueron, 8146
+year=2023-02, partido, 7953
 year=2023-03, chile, 25969
 year=2023-03, gobierno, 16417
 year=2023-03, país, 15440
@@ -318,26 +98,26 @@ year=2023-05, trabajo, 9266
 year=2023-05, primera, 9244
 year=2023-05, salud, 9096
 year=2023-05, hecho, 9001
-year=2023-06, chile, 22412
+year=2023-06, chile, 22410
 year=2023-06, país, 14806
 year=2023-06, presidente, 13210
 year=2023-06, estado, 12937
-year=2023-06, nacional, 12251
+year=2023-06, nacional, 12249
 year=2023-06, gobierno, 11583
 year=2023-06, cuenta, 10588
 year=2023-06, región, 10507
-year=2023-06, junio, 10110
+year=2023-06, junio, 10109
 year=2023-06, salud, 9954
 year=2023-06, vida, 9614
 year=2023-06, millones, 9241
-year=2023-06, lugar, 8954
+year=2023-06, lugar, 8953
 year=2023-06, hecho, 8824
-year=2023-06, tiempo, 8744
+year=2023-06, tiempo, 8742
 year=2023-06, trabajo, 8683
 year=2023-06, medio, 8535
 year=2023-06, mundo, 8500
 year=2023-06, pasado, 8466
-year=2023-06, primera, 8287
+year=2023-06, primera, 8286
 year=2023-07, chile, 19437
 year=2023-07, estado, 12035
 year=2023-07, gobierno, 11601
@@ -358,24 +138,24 @@ year=2023-07, lugar, 7302
 year=2023-07, trabajo, 7079
 year=2023-07, medio, 6941
 year=2023-07, ministro, 6852
-year=2023-08, chile, 21030
+year=2023-08, chile, 21026
 year=2023-08, gobierno, 12945
 year=2023-08, país, 12937
 year=2023-08, estado, 12793
 year=2023-08, nacional, 12320
 year=2023-08, presidente, 10975
-year=2023-08, agosto, 10352
+year=2023-08, agosto, 10351
 year=2023-08, millones, 9325
 year=2023-08, región, 8750
 year=2023-08, tiempo, 8330
 year=2023-08, vida, 7969
-year=2023-08, lugar, 7658
+year=2023-08, lugar, 7657
 year=2023-08, pasado, 7408
 year=2023-08, respecto, 7407
 year=2023-08, cuenta, 7405
 year=2023-08, hecho, 7333
 year=2023-08, fueron, 7329
-year=2023-08, partido, 7328
+year=2023-08, partido, 7326
 year=2023-08, acuerdo, 7132
 year=2023-08, nuevo, 7092
 year=2023-09, chile, 22875
@@ -938,4 +718,3 @@ year=2025-12, vida, 11199
 year=2025-12, tiempo, 10985
 year=2025-12, lugar, 10630
 year=2025-12, acuerdo, 10434
-"""

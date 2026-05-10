@@ -213,8 +213,15 @@ def main():
     
     peaks = detectar_peak(sorted_diario, p_movil, umbral=1.5)
     print("Termino la deteccion de peaks")
-    for date, value, media in peaks:
-        print(f"{date}: {value} articulos (promedio: {media:.2f})")
+
+    os.makedirs("resultados", exist_ok=True)
+    output_path = os.path.join("resultados", "2_4_peaks.txt")
+    with open(output_path, "w", encoding="utf-8") as f:
+        for date, value, media in peaks:
+            linea = f"{date}: {value} articulos (promedio: {media:.2f})\n"
+            print(linea, end="")
+            f.write(linea)
+    print(f"Resultados guardados en {output_path}")
 
     graficar_peaks(sorted_diario, p_movil, peaks)
 

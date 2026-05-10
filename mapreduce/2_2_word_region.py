@@ -188,12 +188,19 @@ def main():
     conteo_global = calculo_global_conteo(paths)
     print("Empieza el procesamiento del conteo regional y global")
     resultados = proceso_data_conteo(conteo_regional, conteo_global, k=10500)
-    for i in range(0,len(resultados), 2):
-        if len(resultados) != (i+1):
-            print(resultados[i], resultados[i+1])
-        else:
-            print(resultados[i])
+
+    os.makedirs("resultados", exist_ok=True)
+    output_path = os.path.join("resultados", "2_2_word_region.txt")
+    with open(output_path, "w", encoding="utf-8") as f:
+        for i in range(0, len(resultados), 2):
+            if len(resultados) != (i + 1):
+                linea = f"{resultados[i]}  {resultados[i+1]}\n"
+            else:
+                linea = f"{resultados[i]}\n"
+            print(linea, end="")
+            f.write(linea)
     print(f"Termino de reducir los datos")
+    print(f"Resultados guardados en {output_path}")
 
 
 if __name__ == "__main__":

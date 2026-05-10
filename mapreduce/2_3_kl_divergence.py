@@ -269,8 +269,15 @@ def main():
     # El Score es el valor KL de la divergencia
     resultados_ordenados = sorted(kl_results.items(), key=lambda x: x[1], reverse=True)
     graficar_kl_divergence(resultados_ordenados, top=15)
-    #for source, score in sorted(kl_results.items(), key=lambda x: x[1], reverse=True):
-    #   print(f"{source}: {score:.6f}")
+
+    os.makedirs("resultados", exist_ok=True)
+    output_path = os.path.join("resultados", "2_3_kl_divergence.txt")
+    with open(output_path, "w", encoding="utf-8") as f:
+        for source, score in resultados_ordenados:
+            linea = f"{source}: {score:.6f}\n"
+            print(linea, end="")
+            f.write(linea)
+    print(f"Resultados guardados en {output_path}")
 ## SI el valor KL es ALTO, entonces es un vocabulario muy distinto al global
 ## Si el valor KL es BAJO, entonces es un vocabulario similar al promedio
 
